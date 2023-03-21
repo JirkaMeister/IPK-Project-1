@@ -14,48 +14,25 @@
 
 char server_address[100];
 char server_port[100];
-char message[100];
 bool server_mode;
+
+typedef struct{
+    uint8_t opcode;
+    uint8_t payloadLength;
+    char payload[100];
+} message_t;
+
+typedef struct{
+    uint8_t opcode;
+    u_int8_t status;
+    u_int8_t payloadLength;
+    char payload[100];
+} response_t;
 
 void exitError(char* errorMessage)
 {
     fprintf(stderr, "%s", errorMessage);
     exit(1);
-}
-
-void handleIP(char* ip)
-{
-    /* int i = 0;
-    int count = 0;
-    for (i = 0; i < strlen(ip); i++)
-    {
-        if (ip[i] == '.')
-        {
-            count++;
-        }
-        else if (ip[i] < '0' || ip[i] > '9')
-        {
-            exitError("Invalid IP address\n");
-        }
-    }
-    if (count != 3)
-    {
-        exitError("Invalid IP address\n");
-    } */
-    strcpy(server_address, ip);
-}
-
-void handlePort(char* port)
-{
-    int i = 0;
-    for (i = 0; i < strlen(port); i++)
-    {
-        if (port[i] < '0' || port[i] > '9')
-        {
-            exitError("Invalid port\n");
-        }
-    }
-    strcpy(server_port, port);
 }
 
 void handleMode(char* mode)
@@ -76,21 +53,45 @@ void handleMode(char* mode)
 
 void parseArguments(int argc, char *argv[])
 {
-    if (argc != 7)
+    if (argc == 2 && strcmp(argv[1], "--help") == 0)
+    {
+        printf("USAGE:\n");
+        printf("\t./ipkcpc [option] [argument]\n\n");
+        printf("OPTIONS:\n");
+        printf("\t--help\t\tDisplay this help menu\n");
+        printf("\t-h\t\tServer IPv4 adress (default: 0.0.0.0)\n");
+        printf("\t-p\t\tServer port (default: 2023)\n");
+        printf("\t-m\t\tServer mode - TCP or UDP\n\n");
+        exit(0);
+    }
+    else if (argc != 7)
     {
         exitError("Invalid number of arguments\n");
     }
-    handleIP(argv[2]);
-    handlePort(argv[4]);
-    handleMode(argv[6]);
+    for(int i = 1; i < argc; i += 2)
+    {
+        if (strcmp(argv[i], "-h") == 0)
+        {
+            strcpy(server_address, argv[i + 1]);
+        }
+        else if (strcmp(argv[i], "-p") == 0)
+        {
+            strcpy(server_port, argv[i + 1]);
+        }
+        else if (strcmp(argv[i], "-m") == 0)
+        {
+            handleMode(argv[i + 1]);
+        }
+        else
+        {
+            exitError("Invalid argument\n");
+        }
+    }
+    fprintf(stderr, "Server hostname: %s, port: %s, mode: %d\n", server_address, server_port, server_mode);
 }
-int main(int argc, char *argv[])
-{
-    parseArguments(argc, argv);
-    printf("Server hostname: %s, port: %s, mode: %d\n", server_address, server_port, server_mode);
 
-    printf("Enter message: ");
-    fgets(message, 100, stdin);
+int setupSocket()
+{
     int family = AF_INET;
     int type = SOCK_STREAM;
     int protocol = 0;
@@ -104,7 +105,11 @@ int main(int argc, char *argv[])
         exitError("Error creating socket\n");
     }
     fprintf(stderr, "Socket created\n");
+    return sockfd;
+}
 
+struct sockaddr_in setupAdress()
+{
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(atoi(server_port));
@@ -113,23 +118,47 @@ int main(int argc, char *argv[])
         exitError("Invalid address\n");
     }
     fprintf(stderr, "Adress set\n");
-    if (sendto(sockfd, message, strlen(message), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
-    {
-        exitError("Error sending message\n");
-    }
-    fprintf(stderr, "Socket sent\n");
+    return server_addr;
+}
 
-    struct sockaddr_in from_addr;
-    socklen_t from_len = sizeof(from_addr);
-    char buffer[100];
-    if (recvfrom(sockfd, buffer, 100, 0, (struct sockaddr*)&from_addr, &from_len) < 0)
-    {
-        exitError("Error receiving message\n");
-    }
-    else
-    {
-        printf("Received message: %s\n", buffer);
-    }
+int main(int argc, char *argv[])
+{
+    parseArguments(argc, argv);
 
+    message_t message = {'\x00'};
+
+    int sockfd = setupSocket();
+    struct sockaddr_in server_addr = setupAdress();
+
+    while(true)
+    {
+        printf("Enter message: ");
+        fgets(message.payload, 100, stdin);
+        message.payloadLength = strlen(message.payload) - 1;
+        if (message.payload[0] == 'x')
+        {
+            break;
+        }
+        if (sendto(sockfd, &message, sizeof(message), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+        {
+            exitError("Error sending message\n");
+        }
+        fprintf(stderr, "Socket sent\n");
+
+        struct sockaddr_in from_addr;
+        socklen_t from_len = sizeof(from_addr);
+        response_t response;
+
+        if (recvfrom(sockfd, &response, sizeof(response), 0, (struct sockaddr*)&from_addr, &from_len) < 0)
+        {
+            exitError("Error receiving message\n");
+        }
+        else
+        {
+            printf("Received message: %hhu %hhu %hhu\n", response.opcode, response.status, response.payloadLength);
+            response.payload[response.payloadLength] = '\0';
+            printf("payload: %s\n", response.payload);
+        }
+    }
     return 0;
 }
