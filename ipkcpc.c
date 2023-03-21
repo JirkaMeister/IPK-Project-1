@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
+#include <signal.h>
 
 #define UDP 0
 #define TCP 1
@@ -18,6 +19,10 @@
 char server_address[MAXLINE];
 char server_port[MAXLINE];
 bool server_mode;
+
+int sockfd;
+struct sockaddr_in server_addr;
+
 
 typedef struct{
     uint8_t opcode;
@@ -139,7 +144,7 @@ struct sockaddr_in setupAdress(int sockfd)
     {
         exitError("Error resolving hostname\n");
     }
-    struct sockaddr_in server_addr;
+    
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(atoi(server_port));
@@ -164,18 +169,14 @@ void createMessage(message_t *messageUDP, char *messageTCP)
     if (server_mode == UDP)
     {
         fgets(messageUDP->payload, MAXLINE, stdin);
-        fprintf(stderr, "%s", messageUDP->payload);
+        //fprintf(stderr, "%s", messageUDP->payload);
         messageUDP->opcode = '\x00';
-        messageUDP->payloadLength = strlen(messageUDP->payload) - 1;
-        if (strlen(messageUDP->payload) >= 3 && messageUDP->payload[0] == 'C' && messageUDP->payload[1] == '-' && messageUDP->payload[2] == 'c')
-        {
-            exit(0);
-        }
+        messageUDP->payloadLength = strlen(messageUDP->payload);
     }
     else if (server_mode == TCP)
     {
         fgets(messageTCP, MAXLINE, stdin);
-        fprintf(stderr, "%s", messageTCP);
+        //fprintf(stderr, "%s", messageTCP);
         for (int i = 0; i < strlen(messageTCP); i++)
         {
             if (messageTCP[i] == '\r')
@@ -188,7 +189,7 @@ void createMessage(message_t *messageUDP, char *messageTCP)
     
 }
 
-void sendMessage(int sockfd, struct sockaddr_in server_addr, message_t message, char *messageTcp)
+void sendMessage(message_t message, char *messageTcp)
 {
     if (server_mode == UDP)
     {
@@ -206,7 +207,7 @@ void sendMessage(int sockfd, struct sockaddr_in server_addr, message_t message, 
     }
 }
 
-void receiveMessage(int sockfd)
+void receiveMessage()
 {
     if (server_mode == UDP)
     {
@@ -264,11 +265,30 @@ void receiveMessage(int sockfd)
     
 }
 
+void closeConnection()
+{
+    message_t message;
+    sendMessage(message, "BYE\n");
+    receiveMessage(sockfd);
+    close(sockfd);
+}
+
+void handle_sigint()
+{
+    if (server_mode == TCP)
+    {
+        closeConnection();
+    }
+}
+
 int main(int argc, char *argv[])
 {
     parseArguments(argc, argv);
-    int sockfd = setupSocket();
-    struct sockaddr_in server_addr = setupAdress(sockfd);
+    signal(SIGINT, handle_sigint);
+
+    sockfd = setupSocket();
+    server_addr = setupAdress(sockfd);
+
     message_t messageUDP;
     char messageTCP[MAXLINE];
     char firstChar = getchar();
@@ -277,12 +297,13 @@ int main(int argc, char *argv[])
     {
         ungetc(firstChar, stdin);
         createMessage(&messageUDP, messageTCP);
-        sendMessage(sockfd, server_addr, messageUDP, messageTCP);
-        receiveMessage(sockfd);
+        sendMessage(messageUDP, messageTCP);
+        receiveMessage();
         firstChar = getchar();
     }
-    sendMessage(sockfd, server_addr, messageUDP, "BYE\n");
-    receiveMessage(sockfd);
-    close(sockfd);
+    if (server_mode == TCP)
+    {
+        closeConnection();
+    }
     return 0;
 }
