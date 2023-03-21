@@ -14,7 +14,7 @@
 #define UDP 0
 #define TCP 1
 
-#define MAXLINE 100
+#define MAXLINE 255
 
 char server_address[MAXLINE];
 char server_port[MAXLINE];

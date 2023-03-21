@@ -1,59 +1,21 @@
-# IPK Project 1: IPK Calculator Protocol
+# IPK - Projekt 1
 
-## Task
+## Teorie
+Cílem prvního projektu byla tvorba klienta komunikujícího se serverem. Komunikace na straně klienta je rozdělena do 4 částí. V první části je třeba zajistit tvorbu soketu pro komunikaci. Podle typu komunikace (UDP/TCP) volíme příslušný typ soketu. V další části je potřeba správně nastavit adresu serveru. Při použítí TCP je nyní nutné navázat spojení se serverem. Ve třetí části se na danou adresu a port posílá zadaná zpráva. V poslední části se přijímá a zpracovává odpověd serveru.
 
-Your task is to implement a client for the IPK Calculator Protocol [1].
-The client should be able to communicate with any server using IPKCP, not just the provided reference implementation.
+## Implementační detaily
+* Celý projekt jsem psal v jazyce C a překládal pomocí přiloženého Makefilu.
+* Pro UDP odesílanou zprávu jsem využil strukturu:
+        
+        typedef struct{
+            uint8_t opcode;
+            uint8_t payloadLength;
+            char payload[MAXLINE];
+        } message_t;
+* Pro přijímanou UDP zprávu jsem využil obdobnou strukturu s přidaným atributem `u_int8_t status`.
+* TCP zprávy (přijímané i odesílané) jsem zpracovával jako klasické řetězce s upravenou délkou.
+* Při tvorbě UDP i TCP zprávy jsem bral v potaz maximální délku řádku 255 znaků.
+* Při nečekaném ukončení (Ctrl + C, EOF) TCP komunikace dojde vždy k odeslání příkazu `BYE`, aby došlo ke korektnímu uzavření komunikace mezi klientem a serverem.
 
-The client is started using:
-`ipkcpc -h <host> -p <port> -m <mode>`
-where `host` is the IPv4 address of the server, `port` the server port, and `mode` either `tcp` or `udp` (e.g., `ipkcpc -h 1.2.3.4 -p 2023 -m udp`).
-
-The client will use the appropriate protocol variant depending on the selected mode (binary for UDP, textual for TCP).
-It will read a list of commands from the standard input, one per line, and print the received responses on the standard output.
-Responses should be formatted according to the examples below.
-Any (client) errors should be printed to the standard **error output**.
-
-The client should react to the *Interrupt* signal (`C-c`) by gracefully exiting, cleanly terminating the connection as appropriate for the selected mode.
-
-### Input/Output Examples
-
-#### Binary
-
-Input:
-```
-(+ 1 2)
-(a b)
-```
-
-Output:
-```
-OK:3
-ERR:<error message>
-```
-
-#### Textual
-
-Input:
-```
-HELLO
-SOLVE (+ 1 2)
-BYE
-```
-
-Output:
-```
-HELLO
-RESULT 3
-BYE
-```
-
-## Submission
-
-The submission should follow all the requirements described in the general README.
-The project should build a single executable called `ipkcpc` in the project root using the default `make` target.
-This executable need not be self-contained, and can be implemented as a wrapper/launcher, but it should conform to the CLI interface described above.
-
-## References
-
-[1] [IPK Calculator Protocol](./Protocol.md)
+## Testování
+porovnavani s referenčním vystupem
