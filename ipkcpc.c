@@ -164,7 +164,7 @@ void createMessage(message_t *messageUDP, char *messageTCP)
     if (server_mode == UDP)
     {
         fgets(messageUDP->payload, MAXLINE, stdin);
-        //fprintf(stderr, "%s", messageUDP->payload);
+        fprintf(stderr, "%s", messageUDP->payload);
         messageUDP->opcode = '\x00';
         messageUDP->payloadLength = strlen(messageUDP->payload) - 1;
         if (strlen(messageUDP->payload) >= 3 && messageUDP->payload[0] == 'C' && messageUDP->payload[1] == '-' && messageUDP->payload[2] == 'c')
@@ -175,7 +175,15 @@ void createMessage(message_t *messageUDP, char *messageTCP)
     else if (server_mode == TCP)
     {
         fgets(messageTCP, MAXLINE, stdin);
-        //fprintf(stderr, "%s", messageTCP);
+        fprintf(stderr, "%s", messageTCP);
+        for (int i = 0; i < strlen(messageTCP); i++)
+        {
+            if (messageTCP[i] == '\r')
+            {
+                messageTCP[i] = '\n';
+                messageTCP[i + 1] = '\0';
+            }
+        }
     }
     
 }
@@ -263,12 +271,18 @@ int main(int argc, char *argv[])
     struct sockaddr_in server_addr = setupAdress(sockfd);
     message_t messageUDP;
     char messageTCP[MAXLINE];
-    
-    while(true)
+    char firstChar = getchar();
+
+    while(firstChar != EOF)
     {
+        ungetc(firstChar, stdin);
         createMessage(&messageUDP, messageTCP);
         sendMessage(sockfd, server_addr, messageUDP, messageTCP);
         receiveMessage(sockfd);
+        firstChar = getchar();
     }
+    sendMessage(sockfd, server_addr, messageUDP, "BYE\n");
+    receiveMessage(sockfd);
+    close(sockfd);
     return 0;
 }
