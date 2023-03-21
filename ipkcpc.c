@@ -117,48 +117,66 @@ struct sockaddr_in setupAdress()
     {
         exitError("Invalid address\n");
     }
-    fprintf(stderr, "Adress set\n");
+    fprintf(stderr, "Adress set\n\n");
     return server_addr;
+}
+
+void createMessage(message_t *message)
+{
+    fprintf(stderr, "Enter message: ");
+    fgets(message->payload, 100, stdin);
+    fprintf(stderr, " %s", message->payload);
+    message->opcode = '\x00';
+    message->payloadLength = strlen(message->payload) - 1;
+    //debug
+    if (message->payload[0] == 'x')
+    {
+        fprintf(stderr, "\n");
+        exit(0);
+    }
+}
+
+void sendMessage(int sockfd, struct sockaddr_in server_addr, message_t message)
+{
+    if (sendto(sockfd, &message, sizeof(message), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+    {
+        exitError("Error sending message\n");
+    }
+    fprintf(stderr, "Socket sent\n");
+}
+
+void receiveMessage(int sockfd, response_t response)
+{
+    struct sockaddr_in from_addr;
+    socklen_t from_len = sizeof(from_addr); 
+
+    if (recvfrom(sockfd, &response, sizeof(response), 0, (struct sockaddr*)&from_addr, &from_len) < 0)
+    {
+        exitError("Error receiving message\n");
+    }
+    else
+    {
+        printf("Received message: %hhu %hhu %hhu\n", response.opcode, response.status, response.payloadLength);
+        response.payload[response.payloadLength] = '\0';
+        printf("payload: %s\n\n", response.payload);
+    }
 }
 
 int main(int argc, char *argv[])
 {
     parseArguments(argc, argv);
-
-    message_t message = {'\x00'};
-
     int sockfd = setupSocket();
     struct sockaddr_in server_addr = setupAdress();
+    message_t message;
+    response_t response;
 
     while(true)
     {
-        printf("Enter message: ");
-        fgets(message.payload, 100, stdin);
-        message.payloadLength = strlen(message.payload) - 1;
-        if (message.payload[0] == 'x')
-        {
-            break;
-        }
-        if (sendto(sockfd, &message, sizeof(message), 0, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
-        {
-            exitError("Error sending message\n");
-        }
-        fprintf(stderr, "Socket sent\n");
-
-        struct sockaddr_in from_addr;
-        socklen_t from_len = sizeof(from_addr);
-        response_t response;
-
-        if (recvfrom(sockfd, &response, sizeof(response), 0, (struct sockaddr*)&from_addr, &from_len) < 0)
-        {
-            exitError("Error receiving message\n");
-        }
-        else
-        {
-            printf("Received message: %hhu %hhu %hhu\n", response.opcode, response.status, response.payloadLength);
-            response.payload[response.payloadLength] = '\0';
-            printf("payload: %s\n", response.payload);
-        }
+        createMessage(&message);
+        
+        sendMessage(sockfd, server_addr, message);
+        
+        receiveMessage(sockfd, response);
     }
     return 0;
 }
