@@ -87,7 +87,7 @@ void parseArguments(int argc, char *argv[])
             exitError("Invalid argument\n");
         }
     }
-    fprintf(stderr, "Server hostname: %s, port: %s, mode: %d\n", server_address, server_port, server_mode);
+    fprintf(stderr, "Server hostname: %s\nServer port: %s\nServer mode: %d\n", server_address, server_port, server_mode);
 }
 
 int setupSocket()
@@ -104,7 +104,7 @@ int setupSocket()
     {
         exitError("Error creating socket\n");
     }
-    fprintf(stderr, "Socket created\n");
+    fprintf(stderr, "OK: Socket created\n");
     return sockfd;
 }
 
@@ -117,21 +117,19 @@ struct sockaddr_in setupAdress()
     {
         exitError("Invalid address\n");
     }
-    fprintf(stderr, "Adress set\n\n");
+    fprintf(stderr, "OK: Adress set\n");
     return server_addr;
 }
 
 void createMessage(message_t *message)
 {
-    fprintf(stderr, "Enter message: ");
     fgets(message->payload, 100, stdin);
-    fprintf(stderr, " %s", message->payload);
+    fprintf(stderr, "%s", message->payload);
     message->opcode = '\x00';
     message->payloadLength = strlen(message->payload) - 1;
-    //debug
-    if (message->payload[0] == 'x')
+    if (strcmp(message->payload, "C-c") == 0)
     {
-        fprintf(stderr, "\n");
+        fprintf(stderr, "\n\n");
         exit(0);
     }
 }
@@ -142,11 +140,11 @@ void sendMessage(int sockfd, struct sockaddr_in server_addr, message_t message)
     {
         exitError("Error sending message\n");
     }
-    fprintf(stderr, "Socket sent\n");
 }
 
-void receiveMessage(int sockfd, response_t response)
+void receiveMessage(int sockfd)
 {
+    response_t response;
     struct sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr); 
 
@@ -156,9 +154,15 @@ void receiveMessage(int sockfd, response_t response)
     }
     else
     {
-        printf("Received message: %hhu %hhu %hhu\n", response.opcode, response.status, response.payloadLength);
         response.payload[response.payloadLength] = '\0';
-        printf("payload: %s\n\n", response.payload);
+        if (response.status == 0)
+        {
+            printf("OK:%s\n", response.payload);
+        }
+        else
+        {
+            printf("ERR:%s\n", response.payload);
+        }
     }
 }
 
@@ -168,15 +172,14 @@ int main(int argc, char *argv[])
     int sockfd = setupSocket();
     struct sockaddr_in server_addr = setupAdress();
     message_t message;
-    response_t response;
-
+    
+    fprintf(stderr, "OK: Client started\n");
+    fprintf(stderr, "____________________________________________________________\n\n");
     while(true)
     {
         createMessage(&message);
-        
         sendMessage(sockfd, server_addr, message);
-        
-        receiveMessage(sockfd, response);
+        receiveMessage(sockfd);
     }
     return 0;
 }
