@@ -1,3 +1,10 @@
+/*
+IPK Projekt 1 
+Soubor: ipkcpc.c
+Autor: Jiri Charamza
+Login: xchara04
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,14 +176,12 @@ void createMessage(message_t *messageUDP, char *messageTCP)
     if (server_mode == UDP)
     {
         fgets(messageUDP->payload, MAXLINE, stdin);
-        //fprintf(stderr, "%s", messageUDP->payload);
         messageUDP->opcode = '\x00';
         messageUDP->payloadLength = strlen(messageUDP->payload);
     }
     else if (server_mode == TCP)
     {
         fgets(messageTCP, MAXLINE, stdin);
-        //fprintf(stderr, "%s", messageTCP);
         for (int i = 0; i < strlen(messageTCP); i++)
         {
             if (messageTCP[i] == '\r')
