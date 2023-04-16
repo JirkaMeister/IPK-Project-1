@@ -1,2 +1,2 @@
 all:
-	gcc -o ipkcpc ipkcpc.c
+	gcc -o ipkcpc src/ipkcpc.c
