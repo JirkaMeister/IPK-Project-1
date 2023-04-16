@@ -18,10 +18,7 @@ Login: xchara04
 #include <errno.h>
 #include <signal.h>
 
-#define UDP 0
-#define TCP 1
-
-#define MAXLINE 255
+#include "ipkcpUtils.h"
 
 char server_address[MAXLINE];
 char server_port[MAXLINE];
@@ -30,36 +27,10 @@ bool server_mode;
 int sockfd;
 struct sockaddr_in server_addr;
 
-
-typedef struct{
-    uint8_t opcode;
-    uint8_t payloadLength;
-    char payload[MAXLINE];
-} message_t;
-
-typedef struct{
-    uint8_t opcode;
-    u_int8_t status;
-    u_int8_t payloadLength;
-    char payload[MAXLINE];
-} response_t;
-
 void exitError(char* errorMessage)
 {
     fprintf(stderr, "%s", errorMessage);
     exit(1);
-}
-
-void formatTcpMessage(char *messageTcp)
-{
-    for (int i = 0; i < strlen(messageTcp); i++)
-    {
-        if (messageTcp[i] == '\n')
-        {
-            messageTcp[i + 1] = '\0';
-            return;
-        }
-    }
 }
 
 void handleMode(char* mode)
@@ -119,6 +90,18 @@ void parseArguments(int argc, char *argv[])
         else
         {
             exitError("Invalid argument\n");
+        }
+    }
+}
+
+void formatTcpMessage(char *messageTcp)
+{
+    for (int i = 0; i < strlen(messageTcp); i++)
+    {
+        if (messageTcp[i] == '\n')
+        {
+            messageTcp[i + 1] = '\0';
+            return;
         }
     }
 }
