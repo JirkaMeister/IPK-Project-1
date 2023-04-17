@@ -27,7 +27,9 @@ char server_address[MAXLINE];
 char server_port[MAXLINE];
 bool server_mode;
 
+bool helloMessage = true;
 int sockfd;
+int comm_sockfd;
 struct sockaddr_in server_addr;
 
 bool useDouble = false;
@@ -50,8 +52,14 @@ int countDecimalPlaces(double number)
 }
 
 
-double solve(char *str, bool *success)
+double solve(char *str, bool *success, bool firstCall)
 {
+    if (firstCall)
+    {
+        *success = true;
+        useDouble = false;
+    }
+
     regex_t regex;
     int regexMatch;
     char msgbuf[100];
@@ -205,7 +213,7 @@ double solve(char *str, bool *success)
             char rightSideTmp[256];
             strcpy(rightSideTmp, str + rightBracketIndex + 1);
 
-            double result = solve(tmpString);
+            double result = solve(tmpString, success, false);
             char resultString[64];
             sprintf(resultString, "%.*lf", countDecimalPlaces(result), result);
 
@@ -261,39 +269,91 @@ void to_fraction(double x, int *numerator, int *denominator) {
 }
 
 
-response_t handleRequest(message_t message)
+response_t handleRequest(message_t messageUDP, char *messageTCP, bool *success)
 {
     response_t response;
-    response.opcode = '\x01';
+    double result;
 
-    if (message.opcode == '\x00')
+    if (server_mode == UDP)
     {
-        fprintf(stderr, "Message opcode: %d\n", message.opcode);
-        fprintf(stderr, "Message payload length: %d\n", message.payloadLength);
-        fprintf(stderr, "Message payload: %s\n", message.payload);
-        response.status = '\x00';
-    }
-    else
-    {
-        response.status = '\x01';
-    }
-
-    for(int i = 0; i < message.payloadLength; i++)
-    {
-        if (message.payload[i] == '\n' || message.payload[i] == '\r')
+        response.opcode = '\x01';
+        if (messageUDP.opcode == '\x00')
         {
-            message.payload[i] = '\0';
-            break;
+            fprintf(stderr, "Message opcode: %d\n", messageUDP.opcode);
+            fprintf(stderr, "Message payload length: %d\n", messageUDP.payloadLength);
+            fprintf(stderr, "Message payload: %s\n", messageUDP.payload);
+            response.status = '\x00';
+        }
+        else
+        {
+            response.status = '\x01';
+        }
+
+        for(int i = 0; i < messageUDP.payloadLength; i++)
+        {
+            if (messageUDP.payload[i] == '\n' || messageUDP.payload[i] == '\r')
+            {
+                messageUDP.payload[i] = '\0';
+                break;
+            }
+        }
+        response.payloadLength = strlen(messageUDP.payload);
+        result = solve(messageUDP.payload, success, true);
+    }
+    else if (server_mode == TCP)
+    {
+        char *EOL = strchr(messageTCP, '\n');
+        if (EOL != NULL)
+        {
+            *EOL = '\0';
+        }
+
+        EOL = strchr(messageTCP, '\r');
+        if (EOL != NULL)
+        {
+            *EOL = '\0';
+        }
+
+        if (helloMessage)
+        {
+            if (strcmp(messageTCP, "HELLO") == 0)
+            {
+                strcpy(response.payload, "HELLO\n");
+                helloMessage = false;
+                return response;
+            }
+            else
+            {
+                *success = false;
+            }
+        }
+        else
+        {
+            if (strlen(messageTCP) > 6 && messageTCP[0] == 'S' && messageTCP[1] == 'O' && messageTCP[2] == 'L' && messageTCP[3] == 'V' && messageTCP[4] == 'E' && messageTCP[5] == ' ')
+            {
+                result = solve(messageTCP + 6, success, true);
+            }
+            else
+            {
+                *success = false;
+            }
         }
     }
-    response.payloadLength = strlen(message.payload);
-    bool success = true;
-    double result = solve(message.payload, &success);
-    fprintf(stderr, "Result: %lf\n", result);
-    if (!success)
+    
+    
+    //fprintf(stderr, "Result: %lf\n", result);
+    if (!(*success))
     {
-        response.status = '\x01';
-        strcpy(response.payload, "Could not parse the message");
+        if (server_mode == UDP)
+        {
+            response.status = '\x01';
+            strcpy(response.payload, "Could not parse the message");
+            fprintf(stderr, "%s\n", response.payload);
+        }
+        else if (server_mode == TCP)
+        {
+            strcpy(response.payload, "BYE\n");
+        }
     }
     else
     {
@@ -312,49 +372,138 @@ response_t handleRequest(message_t message)
             sprintf(response.payload,"%d/%d", numerator, denominator);
         }
     }
-    
+    response.payloadLength = strlen(response.payload);
     return response;
 }
 
 int main(int argc, char *argv[])
 {
     parseArguments(argc, argv);
+
+    setup:
     sockfd = setupSocket();
+    int enable = 1;
+    int sockNew = 0;
+    if (server_mode == TCP)
+    {
+        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(enable)))
+        {
+            exitError("Error with setting socket options\n");
+        }   
+    }
 
-    struct sockaddr_in server_addr = setupAdress(sockfd, SERVER);
-
-    struct sockaddr_in client_addr;
-    socklen_t client_addr_size = sizeof(client_addr);
-    struct sockaddr *client_address = (struct sockaddr *) &client_addr;
+    server_addr = setupAdress(sockfd, SERVER);
+    connectTCP(SERVER);
 
     while(true)
     {
-        message_t message;
+        message_t messageUDP;
+        char messageTCP[MAXLINE];
         response_t response;
-        response.opcode = '\x01';
+        bool success = true;
 
-        fprintf(stderr, "Waiting for message\n");
-
-        if (recvfrom(sockfd, &message, sizeof(message), 0, client_address, &client_addr_size) < 0)
+        if (server_mode == UDP)
         {
-            exitError("Error receiving message\n");
-        }
-        else
-        {
-            fprintf(stderr, "Received message\n");
-        }
+            struct sockaddr_in client_addr;
+            socklen_t client_addr_size = sizeof(client_addr);
+            struct sockaddr *client_address = (struct sockaddr *) &client_addr;
+            
+            response.opcode = '\x01';
+            fprintf(stderr, "Waiting for message\n");
 
-        // Handle message
-        response = handleRequest(message);
+            if (recvfrom(sockfd, &messageUDP, sizeof(messageUDP), 0, client_address, &client_addr_size) < 0)
+            {
+                exitError("Error receiving message\n");
+            }
+            else
+            {
+                fprintf(stderr, "Received message\n");
+            }
 
-        if (sendto(sockfd, &response, sizeof(response), 0, client_address, client_addr_size) < 0)
-        {
-            exitError("Error sending response\n");
-        }
-        else
-        {
-            fprintf(stderr, "Sent message\n\n");
-        }
+            // Handle message
+            response = handleRequest(messageUDP, messageTCP, &success);
 
+            if (sendto(sockfd, &response, sizeof(response), 0, client_address, client_addr_size) < 0)
+            {
+                exitError("Error sending response\n");
+            }
+            else
+            {
+                fprintf(stderr, "Sent message\n\n");
+            }
+        }
+        else if (server_mode == TCP)
+        {
+            char messageTCP[MAXLINE];
+            char responseTCP[MAXLINE];
+            pid_t pid;
+            
+            if (sockNew == 0)
+            {
+                int addrlen = sizeof(server_addr);
+                sockNew = accept(sockfd, (struct sockaddr *)&server_addr, (socklen_t*)&addrlen);
+                if (sockNew < 0)
+                {
+                    exitError("Error accepting connection\n");
+                }
+                else
+                {
+                    fprintf(stderr, "Accepted connection\n");
+                }
+                pid = fork();
+            }
+            if (pid == -1)
+            {
+                exitError("Error forking\n");
+            }
+            else if (pid == 0)
+            {
+                if (recv(sockNew, &messageTCP, sizeof(messageTCP), 0) < 0)
+                {
+                    exitError("Error receiving message\n");
+                }
+                else
+                {
+                    fprintf(stderr, "Received message\n");
+                }
+
+
+                response = handleRequest(messageUDP, messageTCP, &success);
+                strcpy(responseTCP, response.payload);
+
+                if (strcmp(responseTCP, "HELLO\n") != 0 && strcmp(responseTCP, "BYE\n") != 0 && success == true)
+                {
+                    char tmp[MAXLINE];
+                    strcpy(tmp, responseTCP);
+                    strcpy(responseTCP, "RESULT ");
+                    strcat(responseTCP, tmp);
+                    strcat(responseTCP, "\n");
+                    strcat(responseTCP, "\0");
+                }
+
+
+                if (send(sockNew, &responseTCP, strlen(responseTCP), 0) < 0)
+                {
+                    exitError("Error sending response\n");
+                }
+                else
+                {
+                    fprintf(stderr, "Sent message: %s\n\n", responseTCP);
+                }
+                
+                if (strcmp(responseTCP, "BYE\n") == 0)
+                {
+                    close(sockNew);
+                    shutdown(sockNew, SHUT_RDWR);
+                    break;
+                }
+            }
+            else
+            {
+                close(sockNew);
+                shutdown(sockNew, SHUT_RDWR);
+                sockNew = 0;
+            }
+        }
     }
 }

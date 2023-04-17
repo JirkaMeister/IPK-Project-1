@@ -52,4 +52,7 @@ int setupSocket();
 
 struct sockaddr_in setupAdress(int sockfd, bool role);
 
+void connectTCP(bool role);
+
+
 #endif

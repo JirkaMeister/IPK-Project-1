@@ -117,23 +117,12 @@ struct sockaddr_in setupAdress(int sockfd, bool role)
         {
             exitError("Invalid address\n");
         }
-        
-        if (server_mode == TCP)
-        {
-            if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
-            {
-                exitError("Error connecting to server\n");
-            }
-        }
     }
     else if (role == SERVER)
     {
-        server_addr.sin_addr.s_addr = inet_addr(server_address);
-
-        struct sockaddr *address = (struct sockaddr *) &server_addr;
-        int address_size = sizeof(server_addr);
+        server_addr.sin_addr.s_addr = INADDR_ANY;
     
-        if (bind(sockfd, address, address_size) < 0)
+        if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
         {
             exitError("Error binding socket\n");
         }
@@ -141,3 +130,23 @@ struct sockaddr_in setupAdress(int sockfd, bool role)
 
     return server_addr;
 }
+
+void connectTCP(bool role)
+{
+    if (server_mode == TCP && role == CLIENT)
+    {
+        if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+        {
+            exitError("Error connecting to server\n");
+        }
+    }
+    else if (server_mode == TCP && role == SERVER)
+    {
+        int maxConnections = 3;
+        if (listen(sockfd, maxConnections) < 0)
+        {
+            exitError("Error listening on socket\n");
+        }
+    }
+}
+

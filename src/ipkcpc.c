@@ -113,6 +113,7 @@ void receiveMessage()
 
         if (strcmp(responseTcp, "RESULT") == 0)
         {
+            
             if (recv(sockfd, responseTcp, strlen(responseTcp), 0) < 0)
             {
                 exitError("Error receiving message\n");
@@ -144,7 +145,7 @@ void handle_sigint()
 {
     if (server_mode == TCP)
     {
-        closeConnection();
+        closeConnection(CLIENT);
     }
 }
 
@@ -155,6 +156,7 @@ int main(int argc, char *argv[])
 
     sockfd = setupSocket();
     server_addr = setupAdress(sockfd, CLIENT);
+    connectTCP(CLIENT);
 
     message_t messageUDP;
     char messageTCP[MAXLINE];
