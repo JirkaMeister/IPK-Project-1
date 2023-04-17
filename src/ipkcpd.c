@@ -22,15 +22,8 @@ Login: xchara04
 
 #include "ipkcpUtils.h"
 
-
-char server_address[MAXLINE];
-char server_port[MAXLINE];
-bool server_mode;
-
 bool helloMessage = true;
-int sockfd;
 int comm_sockfd;
-struct sockaddr_in server_addr;
 
 bool useDouble = false;
 
